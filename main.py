@@ -19,7 +19,7 @@ except ImportError:
 # ==== CONFIG ====
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
-SESSION = int(os.getenv("SESSION_STRING"))
+SESSION = os.getenv("SESSION_STRING")
 BOT_USERNAME = "slave_waifu_bot"
 DB_FILE = "ZDbx.json"
 
