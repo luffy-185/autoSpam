@@ -22,7 +22,8 @@ except ImportError:
 API_ID = int(os.environ.get('API_ID', '0'))
 API_HASH = os.environ.get('API_HASH', '')
 SESSION_STRING = os.environ.get('SESSION_STRING', '')
-BOT_USERNAME = os.environ.get('BOT_USERNAME', 'slave_waifu_bot')
+OWNER_ID = int(os.environ.get('OWNER_ID', '0'))
+BOT_USERNAME = os.environ.get('WAIFU_BOT_ID', 'slave_waifu_bot')
 DB_FILE = "ZDbx.json"
 
 # ==== GLOBAL STATE ====
@@ -97,6 +98,10 @@ def setup_logging():
         ]
     )
 
+def is_owner(user_id: int) -> bool:
+    """Check if user is the bot owner"""
+    return user_id == OWNER_ID
+
 async def search_character(photo_id: str, photo_access_hash: str) -> str:
     """Search for character name in database"""
     stable_id = f"{photo_id}_{photo_access_hash}"
@@ -111,8 +116,13 @@ async def main():
         print("Please set them in your deployment platform:")
         print("  API_ID=your_api_id")
         print("  API_HASH=your_api_hash")
+        print("  OWNER_ID=your_telegram_user_id")
         print("  SESSION_STRING=your_session_string (optional for first run)")
         return
+    
+    if not OWNER_ID:
+        print("⚠️ OWNER_ID not set! Commands will be disabled.")
+        print("Set OWNER_ID=your_telegram_user_id to enable commands")
     
     # Start keep_alive server if available
     if KEEP_ALIVE_AVAILABLE:
@@ -149,6 +159,11 @@ async def main():
     @client.on(events.NewMessage(pattern=r'^/grab\s+(on|off|onall|offall)$'))
     async def handle_grab_command(event):
         """Handle /grab on/off/onall/offall commands"""
+        # Check if user is owner
+        if not is_owner(event.sender_id):
+            await event.reply("🚫 **Access Denied** - Owner only command!")
+            return
+        
         command = event.pattern_match.group(1).lower()
         chat_id = event.chat_id
         
@@ -176,6 +191,10 @@ async def main():
     @client.on(events.NewMessage(pattern=r'^/status$'))
     async def handle_status_command(event):
         """Handle /status command"""
+        # Check if user is owner
+        if not is_owner(event.sender_id):
+            return
+            
         try:
             chat_id = event.chat_id
             is_enabled = state.is_enabled(chat_id)
@@ -188,7 +207,7 @@ async def main():
 📋 **Individual Chats:** {len(state.enabled_chats)} enabled
 ⏱️ **Uptime:** {state.get_uptime()}
 📚 **Database:** {len(state.db)} characters loaded
-🤖 **Bot:** {BOT_USERNAME}
+
             """.strip()
             
             await event.reply(status_msg)
