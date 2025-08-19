@@ -1,12 +1,14 @@
 import json
-import os
 import asyncio
 import logging
 import threading
+import os
+import tempfile
 from datetime import datetime
 from typing import Dict, Set
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaPhoto
+from telethon.sessions import StringSession
 
 # Import keep_alive Flask server
 try:
@@ -17,10 +19,10 @@ except ImportError:
     KEEP_ALIVE_AVAILABLE = False
 
 # ==== CONFIG ====
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-SESSION = os.getenv("SESSION_STRING")
-BOT_USERNAME = "slave_waifu_bot"
+API_ID = int(os.environ.get('API_ID', '0'))
+API_HASH = os.environ.get('API_HASH', '')
+SESSION_STRING = os.environ.get('SESSION_STRING', '')
+BOT_USERNAME = os.environ.get('BOT_USERNAME', 'slave_waifu_bot')
 DB_FILE = "ZDbx.json"
 
 # ==== GLOBAL STATE ====
@@ -34,12 +36,20 @@ class AutoGrabState:
     def load_db(self):
         """Load the character database"""
         try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                self.db = json.load(f)
-            print(f"✅ Loaded DB with {len(self.db)} entries")
-        except FileNotFoundError:
-            print(f"❌ DB file {DB_FILE} not found!")
-            self.db = {}
+            # Try to load from file first
+            if os.path.exists(DB_FILE):
+                with open(DB_FILE, "r", encoding="utf-8") as f:
+                    self.db = json.load(f)
+                print(f"✅ Loaded DB with {len(self.db)} entries")
+            else:
+                # If file doesn't exist, try environment variable
+                db_content = os.environ.get('CHARACTER_DB')
+                if db_content:
+                    self.db = json.loads(db_content)
+                    print(f"✅ Loaded DB from environment with {len(self.db)} entries")
+                else:
+                    print(f"❌ DB file {DB_FILE} not found and no CHARACTER_DB env var!")
+                    self.db = {}
         except Exception as e:
             print(f"❌ Error loading DB: {e}")
             self.db = {}
@@ -95,6 +105,15 @@ async def search_character(photo_id: str, photo_access_hash: str) -> str:
 async def main():
     setup_logging()
     
+    # Validate environment variables
+    if not API_ID or not API_HASH:
+        print("❌ Missing API_ID or API_HASH environment variables!")
+        print("Please set them in your deployment platform:")
+        print("  API_ID=your_api_id")
+        print("  API_HASH=your_api_hash")
+        print("  SESSION_STRING=your_session_string (optional for first run)")
+        return
+    
     # Start keep_alive server if available
     if KEEP_ALIVE_AVAILABLE:
         try:
@@ -103,8 +122,23 @@ async def main():
         except Exception as e:
             print(f"⚠️ Failed to start keep_alive server: {e}")
     
-    client = TelegramClient(SESSION, API_ID, API_HASH)
+    # Create session - use StringSession for cloud deployment
+    if SESSION_STRING:
+        session = StringSession(SESSION_STRING)
+        print("🔑 Using provided session string")
+    else:
+        session = StringSession()
+        print("🔑 Creating new session - you'll need to save the session string!")
+    
+    client = TelegramClient(session, API_ID, API_HASH)
     await client.start()
+    
+    # If this is a new session, print the session string to save
+    if not SESSION_STRING:
+        session_string = client.session.save()
+        print(f"\n🔐 SAVE THIS SESSION STRING FOR FUTURE DEPLOYMENTS:")
+        print(f"SESSION_STRING = '{session_string}'")
+        print("Add this to your environment variables!\n")
     
     me = await client.get_me()
     print(f"✅ Auto-Grab Bot started as {me.username or me.first_name}")
