@@ -161,7 +161,6 @@ async def main():
         """Handle /grab on/off/onall/offall commands"""
         # Check if user is owner
         if not is_owner(event.sender_id):
-            await event.reply("🚫 **Access Denied** - Owner only command!")
             return
         
         command = event.pattern_match.group(1).lower()
