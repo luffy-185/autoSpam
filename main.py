@@ -16,9 +16,9 @@ except ImportError:
     KEEP_ALIVE_AVAILABLE = False
 
 # ==== CONFIG ====
-API_ID = 
-API_HASH = 'hash'
-SESSION = "autograb_session"
+API_ID = int(os.getenv("API_ID"))
+API_HASH = int(os.getenv("API_HASH"))
+SESSION = int(os.getenv("SESSION_STRING"))
 BOT_USERNAME = "slave_waifu_bot"
 DB_FILE = "ZDbx.json"
 
