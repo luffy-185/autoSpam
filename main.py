@@ -11,7 +11,7 @@ import threading
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Flask app for health checks (required for Render)
+# Flask app for health checks
 app = Flask(__name__)
 
 @app.route('/')
@@ -36,27 +36,20 @@ class TelegramBot:
         self.bot_user_id = None
         self.start_time = time.time()
 
+        # ✅ add event handlers only once
+        self.client.add_event_handler(self.handle_message, events.NewMessage)
+
     def get_uptime(self):
         uptime_seconds = time.time() - self.start_time
-        days = int(uptime_seconds // 86400)
-        hours = int((uptime_seconds % 86400) // 3600)
+        hours = int(uptime_seconds // 3600)
         minutes = int((uptime_seconds % 3600) // 60)
         seconds = int(uptime_seconds % 60)
-        if days > 0:
-            return f"{days}d {hours}h {minutes}m {seconds}s"
-        elif hours > 0:
-            return f"{hours}h {minutes}m {seconds}s"
-        elif minutes > 0:
-            return f"{minutes}m {seconds}s"
-        else:
-            return f"{seconds}s"
+        return f"{hours}h {minutes}m {seconds}s"
 
     async def start(self):
         await self.client.start()
         self.bot_user_id = (await self.client.get_me()).id
         logger.info(f"Bot started! ID: {self.bot_user_id}")
-
-        self.client.add_event_handler(self.handle_message, events.NewMessage)
         await self.client.run_until_disconnected()
 
     async def handle_message(self, event):
@@ -69,7 +62,7 @@ class TelegramBot:
 
     async def handle_command(self, event):
         text = event.message.text.strip()
-        chat_id = event.chat_id if hasattr(event, 'chat_id') else event.peer_id.user_id
+        chat_id = event.chat_id
 
         if text.startswith('/spam '):
             parts = text.split(' ', 2)
@@ -82,8 +75,13 @@ class TelegramBot:
             except:
                 await event.reply("❌ Invalid parameters")
                 return
+
+            if chat_id in self.spam_tasks:  # ✅ prevent duplicates
+                await event.reply("⚠️ Spam already running in this chat. Use /stop_spam first.")
+                return
+
             await self.start_spam(chat_id, msg, delay)
-            await event.reply(f"✅ Started spam in this chat every {delay}s")
+            await event.reply(f"{msg}\n✅ Started spam in this chat every {delay}s")
 
         elif text == '/stop_spam':
             if chat_id in self.spam_tasks:
@@ -100,11 +98,7 @@ class TelegramBot:
         elif text == '/status':
             uptime = self.get_uptime()
             spam_count = len(self.spam_tasks)
-            await event.reply(
-                f"⏱ Uptime: {uptime}\n"
-                f"🤖 Bot ID: {self.bot_user_id}\n"
-                f"🚀 Spam Tasks: {spam_count}"
-            )
+            await event.reply(f"⏱ Uptime: {uptime}\n🚀 Spam Tasks: {spam_count}")
 
         elif text == '/help':
             help_text = """🤖 Bot Commands (Owner Only):
@@ -121,8 +115,6 @@ class TelegramBot:
             await event.reply(help_text)
 
     async def start_spam(self, chat_id: int, msg: str, delay: int):
-        if chat_id in self.spam_tasks:
-            self.spam_tasks[chat_id].cancel()
         async def spam_loop():
             try:
                 while True:
@@ -146,6 +138,7 @@ def run_flask():
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
 
+
 async def main():
     threading.Thread(target=run_flask, daemon=True).start()
     bot = TelegramBot()
@@ -155,6 +148,7 @@ async def main():
         except Exception as e:
             logger.error(f"Bot crashed: {e}")
             await asyncio.sleep(10)
+
 
 if __name__ == '__main__':
     asyncio.run(main())
